@@ -242,7 +242,7 @@ def GetDiffusionBValue(img):
     patientName = patientName.strip().lower()
     patientId = patientId.strip().lower()
 
-    if "prostatex" in patientName or "prostatex" in pattientId:
+    if "prostatex" in patientName or "prostatex" in patientId:
         return _GetDiffusionBValueProstateX(img)
 
     manufacturer = _GetMetaData(img, "0008|0070")
