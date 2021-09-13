@@ -40,7 +40,7 @@ def main(modelType, outputPath, imagePaths, targetBValue, scale=1.0, seriesNumbe
             adcImage = LoadImage(adcImage)
 
         if adcImage is None:
-            print(f"Error: Coult not load ADC image '{adcPath}'.", file=sys.stderr)
+            print(f"Error: Could not load ADC image '{adcPath}'.", file=sys.stderr)
             exit(1)
 
         print("Info: Loaded ADC image.")
