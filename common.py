@@ -250,7 +250,7 @@ def GetDiffusionBValue(img):
     if manufacturer is None:
         return -1.0
 
-    manufacturer = manufacturer.strip.lower()
+    manufacturer = manufacturer.strip().lower()
 
     if "siemens" in manufacturer:
         return _GetDiffusionBValueSiemens(img)

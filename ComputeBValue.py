@@ -64,7 +64,7 @@ def main(modelType, outputPath, imagePaths, targetBValue, scale=1.0, seriesNumbe
             print(f"Info: Loaded b = {bValue}")
 
             if bValue in imagesByBValue:
-                print(f"Error: Duplicate b-value {bValue} from image '{imagePath}'", file=sys.stderr)
+                print(f"Error: Duplicate b-value {bValue} from image '{imagePath}'.", file=sys.stderr)
                 exit(1)
 
         imagesByBValue.update(tmpImagesByBValue)
@@ -107,7 +107,7 @@ if __name__ == "__main__":
     parser.add_argument("-s", "--scale", dest="scale", type=float, default=1.0, help="Scale factor of target b-value image intensities.")
     parser.add_argument("-A", "--adc-path", dest="adcPath", required=False, type=str, default=None, help="Load an existing ADC image to use for computing a b-value image.")
     parser.add_argument("modelType", type=str, choices=list(modelTable.keys()), help="Diffusion model to use.")
-    parser.add_argument("imagePaths", type=str, nargs='+', help="B-value diffusion series folders and images. Image paths may optionally be suffixed with ':bvalue' to indicate the diffusion b-value of the image.")
+    parser.add_argument("imagePaths", type=str, nargs='+', help="B-value diffusion series folders and image paths. Image paths may optionally be suffixed with ':bvalue' to indicate the diffusion b-value of the image.")
 
     args = parser.parse_args()
 
