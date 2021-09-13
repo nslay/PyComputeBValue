@@ -47,7 +47,6 @@ def main(modelType, outputPath, imagePaths, targetBValue, scale=1.0, seriesNumbe
 
         if not model.SetADCImage(adcImage):
             print(f"Warning: '{modelType}' model does not support using existing ADC image.", file=sys.stderr)
-            exit(1)
 
     imagesByBValue = dict()
 
