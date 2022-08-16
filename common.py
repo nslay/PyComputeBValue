@@ -506,6 +506,9 @@ def ResolveBValueImages(images, adcImage, initialBValue = 0.0):
 
             npImageJ = sitk.GetArrayViewFromImage(images[j])
 
+            if i not in unknownIndices and j not in unknownIndices:
+                continue # Both known, no equation to solve
+
             npMask = np.logical_and(npADCImage > 0, npImageJ > 0)
             npMask = np.logical_and(npMask, npImageI > 0)
             #npMask = np.logical_and(npMask, npImageI >= npImageJ)
