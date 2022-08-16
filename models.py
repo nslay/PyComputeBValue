@@ -287,6 +287,7 @@ class BValueModel:
             bValueImage = self.GetImages()[bValue]
             npBValueImage = sitk.GetArrayFromImage(bValueImage).astype(np.float32)
             npMask = np.logical_and((npB0Image > 0), (npBValueImage < npB0Image))
+            npMask = np.logical_and(npMask, (npBValueImage > 0))
 
             npBValueImage[npMask] = np.log(npBValueImage[npMask] / npB0Image[npMask])
             npBValueImage[np.logical_not(npMask)] = 0

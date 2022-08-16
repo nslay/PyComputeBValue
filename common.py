@@ -121,8 +121,8 @@ def LoadDicomImage(path, seriesUID = None, dim = None, dtype = None):
     # Check if meta data is available!
     # Copy it if it is not!
     if not image.HasMetaDataKey("0020|000e"):
-        for key in reader3D.GetMetaDataKeys(1):
-            image.SetMetaData(key, reader3D.GetMetaData(1, key))
+        for key in reader3D.GetMetaDataKeys(0): # Was 1
+            image.SetMetaData(key, reader3D.GetMetaData(0, key)) # Was (1, key)
 
     return image
 
@@ -261,6 +261,52 @@ def GetDiffusionBValue(img):
 
     return -1.0
 
+def _Uninvert(img):
+    pixelRep = _GetMetaData(img, "0028|0103")
+    bitsStored = _GetMetaData(img, "0028|0101")
+
+    if pixelRep is None or bitsStored is None:
+        return img
+
+    pixelRep = int(pixelRep)
+    bitsStored = int(bitsStored)
+
+    if bitsStored < 1:
+        return img # Uhh?
+
+    if pixelRep == 0: # Unsigned
+        maxValue = (1 << bitsStored) - 1
+    elif pixelRep == 1: # Signed
+        maxValue = (1 << (bitsStored-1)) - 1
+    else:
+        return img # Uhh?
+
+    halfValue = maxValue // 2
+
+    npImg = sitk.GetArrayViewFromImage(img)
+
+    # Not a b-value image or not "inverted" in the expected way
+    if np.any(np.logical_or(npImg < 0, npImg > maxValue)):
+        return img
+
+    highCount = (npImg > halfValue).sum()
+    #print(f"highCount = {highCount}, halfValue = {halfValue}, npImg.size = {npImg.size}")
+
+    if 4*highCount > 3*npImg.size:
+        print(f"Info: B-value image appears inverted. Restoring (high = {maxValue}) ...")
+        npImg = maxValue - npImg
+
+        newImg = sitk.GetImageFromArray(npImg)
+        newImg.CopyInformation(img)
+
+        for key in img.GetMetaDataKeys():
+            newImg.SetMetaData(key, img.GetMetaData(key))
+
+        return newImg
+
+    return img
+
+    
 def LoadBValueImages(path, seriesUID = None, dtype = None):
     # Check for hints
     tmp = re.search(":[0-9]+$", path)
@@ -275,41 +321,211 @@ def LoadBValueImages(path, seriesUID = None, dtype = None):
         else:
             img = LoadImage(path, dtype=dtype)
 
+        if img is None:
+            return None
+
         # Override bvalue
         img.SetMetaData("0018|9087", str(bValue))
 
-        return { bValue: img }
+        return [ _Uninvert(img) ]
 
     filesByBValue = ComputeBValueFileNames(path, seriesUID)        
 
-    if filesByBValue is None or len(filesByBValue) == 0:
+    if filesByBValue is not None and len(filesByBValue) > 0:
+        reader = sitk.ImageSeriesReader()
+        reader.SetImageIO("GDCMImageIO")
+        reader.SetLoadPrivateTags(True)
+        reader.SetMetaDataDictionaryArrayUpdate(True)
+
+        if dtype is not None:
+            reader.SetOutputPixelType(dtype)
+
+        images = []
+
+        for bValue in filesByBValue:
+            reader.SetFileNames(filesByBValue[bValue])
+
+            try:
+                img = reader.Execute()
+            except:
+                return None
+
+            if not img.HasMetaDataKey("0020|000e"):
+                for key in reader.GetMetaDataKeys(0):
+                    img.SetMetaData(key, reader.GetMetaData(0, key))
+
+            img.SetMetaData("0018|9087", str(bValue))
+
+            images.append(_Uninvert(img))
+
+        return images
+
+    filesSortedByBValue = ComputeUnknownBValueFileNames(path, seriesUID)
+
+    if filesSortedByBValue is not None and len(filesSortedByBValue) > 0:
+        reader = sitk.ImageSeriesReader()
+        reader.SetImageIO("GDCMImageIO")
+        reader.SetLoadPrivateTags(True)
+        reader.SetMetaDataDictionaryArrayUpdate(True)
+
+        if dtype is not None:
+            reader.SetOutputPixelType(dtype)
+
+        images = []
+
+        for imageFiles in filesSortedByBValue:
+            reader.SetFileNames(imageFiles)
+
+            try:
+                img = reader.Execute()
+            except:
+                return None
+
+            if not img.HasMetaDataKey("0020|000e"):
+                for key in reader.GetMetaDataKeys(0):
+                    img.SetMetaData(key, reader.GetMetaData(0, key))
+
+            images.append(_Uninvert(img))
+
+        return images
+
+    return None
+
+def ResolveBValueImages(images, adcImage, initialBValue = 0.0):
+    if images is None or len(images) == 0:
         return None
 
-    reader = sitk.ImageSeriesReader()
-    reader.SetImageIO("GDCMImageIO")
-    reader.SetLoadPrivateTags(True)
-    reader.SetMetaDataDictionaryArrayUpdate(True)
+    if all(image.HasMetaDataKey("0018|9087") for image in images):
+        return { float(image.GetMetaData("0018|9087")): image for image in images }
 
-    if dtype is not None:
-        reader.SetOutputPixelType(dtype)
+    print(f"Info: Trying to infer unknown b-values (initial b = {initialBValue}) ...")
+
+    if len(images) < 2:
+        print("Error: Need at least two b-value images.", file=sys.stderr)
+        return None
+
+    if adcImage is None:
+        print("Error: Need ADC image to infer unknown b-values.", file=sys.stderr)
+        return None
+
+    if any(image.GetSize() != adcImage.GetSize() for image in images):
+        print("Error: Dimension mismatch between unknown b-value image and ADC.")
+        return None
+
+    lamIntensityKey = lambda image : np.percentile(sitk.GetArrayViewFromImage(image), 90)
+
+    # Sort all images by intensity
+    images.sort(key=lamIntensityKey, reverse=True)
+
+    # Check that they're still sorted correctly
+    prevBValue = -1.0
+    for image in images:
+        if image.HasMetaDataKey("0018|9087"):
+            bValue = float(image.GetMetaData("0018|9087"))
+
+            if bValue < prevBValue:
+                print("Error: Known b-value image intensities are not consistent with b-value ordering.", file=sys.stderr)
+                return None
+
+            prevBValue = bValue
+
+    # If the first b-value image has a b-value, use that instead of initialBValue
+    if images[0].HasMetaDataKey("0018|9087"):
+        initialBValue = float(images[0].GetMetaData("0018|9087"))
+    else:
+        images[0].SetMetaData("0018|9087", str(initialBValue))
+
+    # Guess only first image was missing b-value?
+    if all(image.HasMetaDataKey("0018|9087") for image in images):
+        return { float(image.GetMetaData("0018|9087")): image for image in images }
+
+    unknownIndices = [ i for i, image in enumerate(images) if not image.HasMetaDataKey("0018|9087") ]
+    unknownIndices = { i: j for j, i in enumerate(unknownIndices) }
+
+    numUnknowns = len(unknownIndices)
+    numKnowns = len(images) - numUnknowns
+
+    M = np.zeros([numUnknowns*numKnowns + numUnknowns*(numUnknowns-1)//2, numUnknowns])
+
+    # Form the system
+    r = 0
+    for i in range(len(images)):
+        for j in range(i+1, len(images)):
+            if i not in unknownIndices and j not in unknownIndices:
+                continue # Both known, no equation to solve
+
+            if i in unknownIndices:
+                M[r, unknownIndices[i]] = -1.0
+
+            if j in unknownIndices:
+                M[r, unknownIndices[j]] = 1.0
+
+            r += 1
+
+    logS = np.zeros(M.shape[:1])
+
+    npADCImage = sitk.GetArrayViewFromImage(adcImage)/1.0e6
+
+    # Form RHS
+    r = 0
+    for i in range(len(images)):
+        bValueI = 0.0
+
+        if images[i].HasMetaDataKey("0018|9087"):
+            bValueI = float(images[i].GetMetaData("0018|9087"))
+
+        npImageI = sitk.GetArrayViewFromImage(images[i])
+
+        for j in range(i+1, len(images)):
+            bValueJ = 0.0
+
+            if images[j].HasMetaDataKey("0018|9087"):
+                bValueJ = float(images[j].GetMetaData("0018|9087"))
+
+            npImageJ = sitk.GetArrayViewFromImage(images[j])
+
+            npMask = np.logical_and(npADCImage > 0, npImageJ > 0)
+            npMask = np.logical_and(npMask, npImageI > 0)
+            #npMask = np.logical_and(npMask, npImageI >= npImageJ)
+
+            if not np.any(npMask):
+                print("Error: Not enough valid voxels to solve for unknown b-value.", file=sys.stderr)
+                return None
+
+            # NOTE: bValueI and bValueJ are each 0 if they are unknown
+            logMean = (npADCImage[npMask]*(npADCImage[npMask]*(bValueI - bValueJ) - np.log(npImageJ[npMask]/npImageI[npMask]))).mean()
+            adcMean2 = (npADCImage[npMask]**2).mean()
+
+            logS[r] = logMean / adcMean2
+            r += 1
+
+    #logS = np.inner(M.T, logS)
+    #M = np.matmul(M.T, M)
+
+    bValues, res, rank, S = np.linalg.lstsq(M, logS, rcond=None)
 
     imagesByBValue = dict()
 
-    for bValue in filesByBValue:
-        reader.SetFileNames(filesByBValue[bValue])
+    for i, image in enumerate(images):
+        if i in unknownIndices:
+            bValue = bValues[unknownIndices[i]]
+        else:
+            bValue = float(image.GetMetaData("0018|9087"))
 
-        try:
-            img = reader.Execute()
-        except:
+        if bValue < initialBValue:
+            print(f"Error: Unexpected solution for unknown b-value: b = {bValue}", file=sys.stderr)
             return None
 
-        if not img.HasMetaDataKey("0020|000e"):
-            for key in reader.GetMetaDataKeys(1):
-                img.SetMetaData(key, reader.GetMetaData(1, key))
+        image.SetMetaData("0018|9087", str(bValue))
 
-        imagesByBValue[bValue] = img
+        if bValue in imagesByBValue:
+            print(f"Error: Duplicate solved b-value {bValue}.", file=sys.stderr)
+            return None
+
+        imagesByBValue[bValue] = image
 
     return imagesByBValue
+
 
 def ComputeBValueFileNames(path, seriesUID = None):
     reader = sitk.ImageFileReader()
@@ -382,6 +598,90 @@ def ComputeBValueFileNames(path, seriesUID = None):
         filesByBValue[bValue] = [ pair[0] for pair in filesAndDictionariesByBValue[bValue] ]
 
     return filesByBValue
+
+def ComputeUnknownBValueFileNames(path, seriesUID = None):
+    reader = sitk.ImageFileReader()
+    reader.SetImageIO("GDCMImageIO")
+    reader.SetLoadPrivateTags(True)
+
+    if not os.path.isdir(path):
+        try:
+            reader.SetFileName(path)
+            reader.ReadImageInformation()
+
+            seriesUID = reader.GetMetaData("0020|000e")
+            path = os.path.dirname(path)
+        except:
+            return None
+
+    if seriesUID is None or seriesUID == "":
+        allSeriesUIDs = sitk.ImageSeriesReader.GetGDCMSeriesIDs(path)
+
+        if len(allSeriesUIDs) == 0:
+            return None
+
+        seriesUID = allSeriesUIDs[0]
+
+    fileNames = sitk.ImageSeriesReader.GetGDCMSeriesFileNames(path, seriesUID)
+
+    if len(fileNames) == 0:
+        return None
+
+    filesAndImages = []
+
+    for fileName in fileNames:
+        try:
+            reader.SetFileName(fileName)
+            img = reader.Execute()
+        except:
+            return None
+
+        filesAndImages.append((fileName, img))
+
+    R = _GetOrientationMatrix(reader)
+
+    if R is None:
+        print(f"Error: Could not determine orientation matrix.", file=sys.stderr)
+        return None
+
+    # Sort slices by position
+    # All the duplicate position slices will be contiguous
+    lamPositionKey = lambda pair : np.inner(R.transpose(), _GetOrigin(pair[1]))[2]
+
+    filesAndImages.sort(key=lamPositionKey)
+
+    numBValues = 0
+    i = 0
+    inext = -1
+    while i < len(filesAndImages):
+        T = _GetOrigin(filesAndImages[i][1])
+
+        # Identify contiguous range of slices with same position
+        try:
+            inext = next(iter(j for j, pair in enumerate(filesAndImages[i:], start=i) if np.linalg.norm(T - _GetOrigin(pair[1])) > 1e-10))
+        except StopIteration:
+            inext = len(filesAndImages)
+
+        if numBValues == 0:
+            numBValues = inext - i
+        elif numBValues != inext - i:
+            print(f"Error: Expected {numBValues} slices, but got {inext - i} (missing slice?).", file=sys.stderr)
+            return None
+
+        lamIntensityKey = lambda pair : np.percentile(sitk.GetArrayViewFromImage(pair[1]), 90)
+
+        # Sort the slices by intensity
+
+        filesAndImages[i:inext] = sorted(filesAndImages[i:inext], key=lamIntensityKey, reverse=True)
+
+        i = inext
+
+    filesSortedByBValue = []
+
+    for i in range(numBValues):
+        filesSortedByBValue.append([ pair[0] for pair in filesAndImages[i::numBValues] ])
+
+    return filesSortedByBValue
 
 ###### Private stuff below ######
 

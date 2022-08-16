@@ -19,19 +19,21 @@
 import sys
 import os
 import argparse
-from common import LoadBValueImages, LoadDicomImage, LoadImage
+from common import LoadBValueImages, ResolveBValueImages, LoadDicomImage, LoadImage
 from models import MonoExponentialModel
 
 modelTable = { 
   "mono": MonoExponentialModel
 }
 
-def main(modelType, outputPath, imagePaths, targetBValue, scale=1.0, seriesNumber=13701, saveADC=False, saveKurtosis=False, savePerfusion=False, compress=False, adcPath=None):
+def main(modelType, outputPath, imagePaths, targetBValue, scale=1.0, seriesNumber=13701, saveADC=False, saveKurtosis=False, savePerfusion=False, compress=False, adcPath=None, initialBValue=0.0):
     if modelType not in modelTable:
         print(f"Error: Unknown model type '{modelType}'.", file=sys.stderr)
         exit(1)
 
     model = modelTable[modelType]()
+
+    adcImage = None
 
     if adcPath is not None:
         if os.path.isdir(adcPath):
@@ -48,26 +50,28 @@ def main(modelType, outputPath, imagePaths, targetBValue, scale=1.0, seriesNumbe
         if not model.SetADCImage(adcImage):
             print(f"Warning: '{modelType}' model does not support using existing ADC image.", file=sys.stderr)
 
-    imagesByBValue = dict()
+    images = []
 
     for imagePath in imagePaths:
-        tmpImagesByBValue = LoadBValueImages(imagePath)
+        tmpImages = LoadBValueImages(imagePath)
 
-        if tmpImagesByBValue is None:
+        if tmpImages is None:
             print(f"Error: Could not load b-value image from '{imagePath}'.", file=sys.stderr)
             exit(1)
 
-        loadedBValues = list(tmpImagesByBValue.keys())
-        loadedBValues.sort()
+        images += tmpImages
 
-        for bValue in loadedBValues:
-            print(f"Info: Loaded b = {bValue}")
+    imagesByBValue = ResolveBValueImages(images, adcImage, initialBValue=initialBValue)
 
-            if bValue in imagesByBValue:
-                print(f"Error: Duplicate b-value {bValue} from image '{imagePath}'.", file=sys.stderr)
-                exit(1)
+    if imagesByBValue is None:
+        print(f"Error: Could not resolve b-values.", file=sys.stderr)
+        exit(1)
 
-        imagesByBValue.update(tmpImagesByBValue)
+    loadedBValues = list(imagesByBValue.keys())
+    loadedBValues.sort()
+
+    for bValue in loadedBValues:
+        print(f"Info: Loaded b = {bValue}")
 
     model.SetTargetBValue(targetBValue)
     model.SetImages(imagesByBValue)
@@ -106,6 +110,7 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--save-perfusion", dest="savePerfusion", action="store_true", default=False, help="Save calculated perfusion fraction image. The output path will have _Perfusion appended.")
     parser.add_argument("-s", "--scale", dest="scale", type=float, default=1.0, help="Scale factor of target b-value image intensities.")
     parser.add_argument("-A", "--adc-path", dest="adcPath", required=False, type=str, default=None, help="Load an existing ADC image to use for computing a b-value image.")
+    parser.add_argument("-I", "--initial-b-value", dest="initialBValue", required=False, type=float, default=0.0, help="Initial expected b-value in a diffusion series of unknown b-values.")
     parser.add_argument("modelType", type=str, choices=list(modelTable.keys()), help="Diffusion model to use.")
     parser.add_argument("imagePaths", type=str, nargs='+', help="B-value diffusion series folders and image paths. Image paths may optionally be suffixed with ':bvalue' to indicate the diffusion b-value of the image.")
 

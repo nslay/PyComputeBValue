@@ -1,5 +1,5 @@
 # Introduction
-PyComputeBValue is a tool that can calculate b-value images from one or more given b-value images (and optionally a given ADC image) using the mono-exponential model. It can read vendor-specific formatted diffusion b-values from DICOM and can write b-value, Apparent Diffusion Coefficient (ADC), kurtosis, and perfusion fraction images to medical image formats like MetaIO, NIFTI, as well as DICOM. As diffusion MRI sequences are often interleaves with b-values, this tool supports extracting individual b-value image volumes from such sequences!
+PyComputeBValue is a tool that can calculate b-value images from one or more given b-value images (and optionally a given ADC image) using the mono-exponential model. It can read vendor-specific formatted diffusion b-values from DICOM, solve for unknown b-values, and can write b-value, Apparent Diffusion Coefficient (ADC), kurtosis, and perfusion fraction images to medical image formats like MetaIO, NIFTI, as well as DICOM. As diffusion MRI sequences are often interleaved with b-values, this tool supports extracting individual b-value image volumes from such sequences! When the tool cannot determine b-value from DICOM, it will attempt to solve for the unknown b-values (you must have ADC and know the initial b-value used, e.g. b=0).
 
 PyComputeBValue is a Python port of ComputeBValue
 
@@ -75,40 +75,32 @@ Lastly, PyComputeBValue provides the below usage message when provided with the 
 forget.
 
 ```
-usage: ComputeBValue.py [-h] [-a] -b TARGETBVALUE [-c] [-k] [-n SERIESNUMBER]
-                        -o OUTPUTPATH [-p] [-s SCALE] [-A ADCPATH]
-                        {mono} imagePaths [imagePaths ...]
+usage: ComputeBValue.py [-h] [-a] -b TARGETBVALUE [-c] [-k] [-n SERIESNUMBER] -o OUTPUTPATH [-p] [-s SCALE] [-A ADCPATH] [-I INITIALBVALUE] {mono} imagePaths [imagePaths ...]
 
 PyComputeBValue
 
 positional arguments:
   {mono}                Diffusion model to use.
-  imagePaths            B-value diffusion series folders and images. Image
-                        paths may optionally be suffixed with ':bvalue' to
-                        indicate the diffusion b-value of the image.
+  imagePaths            B-value diffusion series folders and image paths. Image paths may optionally be suffixed with ':bvalue' to indicate the diffusion b-value of the image.
 
 optional arguments:
   -h, --help            show this help message and exit
-  -a, --save-adc        Save calculated ADC. The output path will have _ADC
-                        appended (folder --> folder_ADC or file.ext -->
-                        file_ADC.ext).
+  -a, --save-adc        Save calculated ADC. The output path will have _ADC appended (folder --> folder_ADC or file.ext --> file_ADC.ext).
   -b TARGETBVALUE, --target-b-value TARGETBVALUE
                         Target b-value to calculate.
   -c, --compress        Compress output.
-  -k, --save-kurtosis   Save calculated kurtosis image. The output path will
-                        have _Kurtosis appended.
+  -k, --save-kurtosis   Save calculated kurtosis image. The output path will have _Kurtosis appended.
   -n SERIESNUMBER, --series-number SERIESNUMBER
                         Series number for calculated b-value image.
   -o OUTPUTPATH, --output-path OUTPUTPATH
-                        Output path which may be a folder for DICOM output or
-                        a medical image format file.
-  -p, --save-perfusion  Save calculated perfusion fraction image. The output
-                        path will have _Perfusion appended.
+                        Output path which may be a folder for DICOM output or a medical image format file.
+  -p, --save-perfusion  Save calculated perfusion fraction image. The output path will have _Perfusion appended.
   -s SCALE, --scale SCALE
                         Scale factor of target b-value image intensities.
   -A ADCPATH, --adc-path ADCPATH
-                        Load an existing ADC image to use for computing a
-                        b-value image.
+                        Load an existing ADC image to use for computing a b-value image.
+  -I INITIALBVALUE, --initial-b-value INITIALBVALUE
+                        Initial expected b-value in a diffusion series of unknown b-values.
 ```
 
 # Models
