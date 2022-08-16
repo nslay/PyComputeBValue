@@ -396,7 +396,18 @@ def ResolveBValueImages(images, adcImage, initialBValue = 0.0):
         return None
 
     if all(image.HasMetaDataKey("0018|9087") for image in images):
-        return { float(image.GetMetaData("0018|9087")): image for image in images }
+        imagesByBValue = dict()
+
+        for image in images:
+            bValue = float(image.GetMetaData("0018|9087"))
+
+            if bValue in imagesByBValue:
+                print(f"Error: Duplicate solved b-value {bValue}.", file=sys.stderr)
+                return None
+
+            imagesByBValue[bValue] = image
+
+        return imagesByBValue
 
     print(f"Info: Trying to infer unknown b-values (initial b = {initialBValue}) ...")
 
@@ -437,7 +448,18 @@ def ResolveBValueImages(images, adcImage, initialBValue = 0.0):
 
     # Guess only first image was missing b-value?
     if all(image.HasMetaDataKey("0018|9087") for image in images):
-        return { float(image.GetMetaData("0018|9087")): image for image in images }
+        imagesByBValue = dict()
+
+        for image in images:
+            bValue = float(image.GetMetaData("0018|9087"))
+
+            if bValue in imagesByBValue:
+                print(f"Error: Duplicate solved b-value {bValue}.", file=sys.stderr)
+                return None
+
+            imagesByBValue[bValue] = image
+
+        return imagesByBValue
 
     unknownIndices = [ i for i, image in enumerate(images) if not image.HasMetaDataKey("0018|9087") ]
     unknownIndices = { i: j for j, i in enumerate(unknownIndices) }
