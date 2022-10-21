@@ -83,7 +83,7 @@ PyComputeBValue
 
 positional arguments:
   {mono}                Diffusion model to use.
-  imagePaths            B-value diffusion series folders and image paths. Image paths may optionally be suffixed with ':bvalue' to indicate the diffusion b-value of the image.
+  imagePaths            B-value diffusion series folders and image paths. Image paths may optionally be suffixed with ':bvalue' to indicate the diffusion b-value of the image. DICOM paths suffixed with ':-1' indicate that DICOM should be ignored when querying the b-value of the image.
 
 optional arguments:
   -h, --help            show this help message and exit
