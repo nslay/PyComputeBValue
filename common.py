@@ -357,7 +357,10 @@ def LoadBValueImages(path, seriesUID = None, dtype = None):
             return None
 
         # Override bvalue
-        img.SetMetaData("0018|9087", str(bValue))
+        if bValue < 0.0:
+            img.EraseMetaData("0018|9087")
+        else:
+            img.SetMetaData("0018|9087", str(bValue))
 
         return [ _Uninvert(img) ]
 
