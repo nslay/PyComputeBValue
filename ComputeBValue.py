@@ -112,7 +112,7 @@ if __name__ == "__main__":
     parser.add_argument("-A", "--adc-path", dest="adcPath", required=False, type=str, default=None, help="Load an existing ADC image to use for computing a b-value image.")
     parser.add_argument("-I", "--initial-b-value", dest="initialBValue", required=False, type=float, default=0.0, help="Initial expected b-value in a diffusion series of unknown b-values.")
     parser.add_argument("modelType", type=str, choices=list(modelTable.keys()), help="Diffusion model to use.")
-    parser.add_argument("imagePaths", type=str, nargs='+', help="B-value diffusion series folders and image paths. Image paths may optionally be suffixed with ':bvalue' to indicate the diffusion b-value of the image.")
+    parser.add_argument("imagePaths", type=str, nargs='+', help="B-value diffusion series folders and image paths. Image paths may optionally be suffixed with ':bvalue' to indicate the diffusion b-value of the image. DICOM paths suffixed with ':-1' indicate that DICOM should be ignored when querying the b-value of the image.")
 
     args = parser.parse_args()
 
