@@ -65,6 +65,8 @@ This example reads B50, B400 and B800 images from NIFTI files.
   
 This is useful for non-DICOM medical image formats that lack the extra meta-data as well as for DICOMs with missing information or undocumented vendor-specific tags for determining diffusion bvalue.
 
+Sometimes DICOM metadata cannot be trusted to determine b-values. This can happen as a result of bugs in software or in an anonymization process. To workaround this, you may append ":-1" to DICOM series paths to force PyComputeBValue to ignore DICOM metadata when querying the b-value. This forces the DICOM image(s) to be treated as unknown b-value images (which can sometimes be solved for).
+
 There are additional flags for saving the calculated ADC (-a), perfusion fraction (-p), and kurtosis image (-k). You may additionally compress the output images (-c) as well as change the output DICOM series number for the calculated b-value image (-n). By default, the series number is 13701 for the calculated b-value image. Other images share a similar series number offset by values of 1-3 (e.g. 13702-4).
 
 **NOTE**: PyComputeBValue does not yet support any models that produce perfusion or kurtosis images.
