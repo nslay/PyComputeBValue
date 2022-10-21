@@ -25,6 +25,19 @@ import uuid
 import time
 import base64
 
+_trustedDICOM=True
+
+def _RemoveBadSlices(fileNames):
+    fileSizes = [ os.path.getsize(fileName) for fileName in fileNames ]
+
+    maxBadSlices = max(1, int(0.25*len(fileNames)))
+
+    maxSize = max(fileSizes)
+
+    newFileNames = [ fileName for fileName, size in zip(fileNames, fileSizes) if 3*size >= maxSize ]
+
+    return newFileNames if len(fileNames) - len(newFileNames) <= maxBadSlices else fileNames
+
 def SaveImage(image, path, compress=True):
     writer = sitk.ImageFileWriter()
     writer.SetFileName(path)
@@ -98,6 +111,8 @@ def LoadDicomImage(path, seriesUID = None, dim = None, dtype = None):
                 fileNames = tmpFileNames # Take largest series
     else:
         fileNames = sitk.ImageSeriesReader.GetGDCMSeriesFileNames(path, seriesUID)
+
+    fileNames = _RemoveBadSlices(fileNames)
 
     if len(fileNames) == 0: # Huh?
         return None
@@ -227,6 +242,11 @@ def SaveDicomImage(image, path, compress=True):
     return True
 
 def GetDiffusionBValue(img):
+    global _trustedDICOM
+
+    if not _trustedDICOM:
+        return -1.0
+
     tmp = _GetMetaData(img, "0018|9087")
 
     if tmp is not None:
@@ -308,8 +328,10 @@ def _Uninvert(img):
 
     
 def LoadBValueImages(path, seriesUID = None, dtype = None):
+    global _trustedDICOM
+
     # Check for hints
-    tmp = re.search(":[0-9]+$", path)
+    tmp = re.search(":-?[0-9]+$", path)
 
     if tmp is not None:
         bValue = float(tmp.group(0)[1:])
@@ -317,7 +339,17 @@ def LoadBValueImages(path, seriesUID = None, dtype = None):
 
         img = None
         if os.path.isdir(path):
-            img = LoadDicomImage(path, seriesUID, dtype=dtype)
+            if bValue < 0.0:
+                _trustedDICOM=False
+                res = LoadBValueImages(path, seriesUID, dtype=dtype)
+                _trustedDICOM=True
+
+                for img in res:
+                    img.EraseMetaData("0018|9087")
+
+                return res
+            else:
+                img = LoadDicomImage(path, seriesUID, dtype=dtype)
         else:
             img = LoadImage(path, dtype=dtype)
 
@@ -411,8 +443,8 @@ def ResolveBValueImages(images, adcImage, initialBValue = 0.0):
 
     print(f"Info: Trying to infer unknown b-values (initial b = {initialBValue}) ...")
 
-    if len(images) < 2:
-        print("Error: Need at least two b-value images.", file=sys.stderr)
+    if len(images) < 1:
+        print("Error: Need at least one b-value image.", file=sys.stderr)
         return None
 
     if adcImage is None:
@@ -808,5 +840,8 @@ def _GetDiffusionBValuePhilips(img):
     if tmp is None:
         return -1.0
 
-    return float(tmp)
+    try:
+        return float(tmp)
+    except:
+        return float(int.from_bytes(base64.b64decode(tmp), "little"))
 
