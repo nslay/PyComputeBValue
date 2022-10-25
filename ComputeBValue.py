@@ -39,7 +39,7 @@ def main(modelType, outputPath, imagePaths, targetBValue, scale=1.0, seriesNumbe
         if os.path.isdir(adcPath):
             adcImage = LoadDicomImage(adcPath)
         else:
-            adcImage = LoadImage(adcImage)
+            adcImage = LoadImage(adcPath)
 
         if adcImage is None:
             print(f"Error: Could not load ADC image '{adcPath}'.", file=sys.stderr)
@@ -110,7 +110,7 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--save-perfusion", dest="savePerfusion", action="store_true", default=False, help="Save calculated perfusion fraction image. The output path will have _Perfusion appended.")
     parser.add_argument("-s", "--scale", dest="scale", type=float, default=1.0, help="Scale factor of target b-value image intensities.")
     parser.add_argument("-A", "--adc-path", dest="adcPath", required=False, type=str, default=None, help="Load an existing ADC image to use for computing a b-value image.")
-    parser.add_argument("-I", "--initial-b-value", dest="initialBValue", required=False, type=float, default=0.0, help="Initial expected b-value in a diffusion series of unknown b-values.")
+    parser.add_argument("-I", "--iniital-b-value", dest="initialBValue", required=False, type=float, default=0.0, help="Initial expected b-value in a diffusion series of unknown b-values.")
     parser.add_argument("modelType", type=str, choices=list(modelTable.keys()), help="Diffusion model to use.")
     parser.add_argument("imagePaths", type=str, nargs='+', help="B-value diffusion series folders and image paths. Image paths may optionally be suffixed with ':bvalue' to indicate the diffusion b-value of the image. DICOM paths suffixed with ':-1' indicate that DICOM should be ignored when querying the b-value of the image.")
 

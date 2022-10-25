@@ -330,16 +330,25 @@ def _Uninvert(img):
 def LoadBValueImages(path, seriesUID = None, dtype = None):
     global _trustedDICOM
 
+    # Thanks to Stephanie Harmon for pointing out need to override b-values in a series comprised of multiple diffusion images
+    
     # Check for hints
-    tmp = re.search(":-?[0-9]+$", path)
+    tmp = re.search(":-?[0-9]+(,[0-9]+)*$", path)
 
     if tmp is not None:
-        bValue = float(tmp.group(0)[1:])
+        bValues = [ float(value) for value in tmp.group(0)[1:].split(",") ]
         path = path[:tmp.start()]
 
         img = None
         if os.path.isdir(path):
-            if bValue < 0.0:
+            if len(bValues) > 1:
+                res = LoadBValueImages(path, seriesUID, dtype=dtype)
+
+                for bValue, img in zip(bValues,res):
+                    img.SetMetaData("0018|9087", str(bValue))
+
+                return res
+            elif bValues[0] < 0.0:
                 _trustedDICOM=False
                 res = LoadBValueImages(path, seriesUID, dtype=dtype)
                 _trustedDICOM=True
@@ -357,10 +366,10 @@ def LoadBValueImages(path, seriesUID = None, dtype = None):
             return None
 
         # Override bvalue
-        if bValue < 0.0:
+        if bValues[0] < 0.0:
             img.EraseMetaData("0018|9087")
         else:
-            img.SetMetaData("0018|9087", str(bValue))
+            img.SetMetaData("0018|9087", str(bValues[0]))
 
         return [ _Uninvert(img) ]
 
@@ -820,7 +829,7 @@ def _GetDiffusionBValueSiemens(img):
     return -1.0
 
 def _GetDiffusionBValueGE(img):
-    tmp = _GetMetaData("0043|1039")
+    tmp = _GetMetaData(img, "0043|1039")
 
     if tmp is None:
         return -1.0
