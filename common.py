@@ -337,6 +337,7 @@ def LoadBValueImages(path, seriesUID = None, dtype = None):
 
     if tmp is not None:
         bValues = [ float(value) for value in tmp.group(0)[1:].split(",") ]
+        bValues.sort() # These should be ascending
         path = path[:tmp.start()]
 
         img = None
