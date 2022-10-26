@@ -342,20 +342,20 @@ def LoadBValueImages(path, seriesUID = None, dtype = None):
 
         img = None
         if os.path.isdir(path):
-            if len(bValues) > 1:
-                res = LoadBValueImages(path, seriesUID, dtype=dtype)
-
-                for bValue, img in zip(bValues,res):
-                    img.SetMetaData("0018|9087", str(bValue))
-
-                return res
-            elif bValues[0] < 0.0:
+            if bValues[0] < 0.0:
                 _trustedDICOM=False
                 res = LoadBValueImages(path, seriesUID, dtype=dtype)
                 _trustedDICOM=True
 
                 for img in res:
                     img.EraseMetaData("0018|9087")
+
+                return res
+            elif len(bValues) > 1:
+                res = LoadBValueImages(path, seriesUID, dtype=dtype)
+
+                for bValue, img in zip(bValues,res):
+                    img.SetMetaData("0018|9087", str(bValue))
 
                 return res
             else:
